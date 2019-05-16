@@ -37,6 +37,7 @@
 #include "qemu/option.h"
 #include "qemu/error-report.h"
 #include "qemu/log.h"
+#include "qemu/units.h"
 #include "qom/object_interfaces.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/block-backend.h"
@@ -267,9 +268,20 @@ static int print_block_option_help(const char *filename, const char *fmt)
         create_opts = qemu_opts_append(create_opts, proto_drv->create_opts);
     }
 
-    printf("Supported options:\n");
+    if (filename) {
+        printf("Supported options:\n");
+    } else {
+        printf("Supported %s options:\n", fmt);
+    }
     qemu_opts_print_help(create_opts, false);
     qemu_opts_free(create_opts);
+
+    if (!filename) {
+        printf("\n"
+               "The protocol level may support further options.\n"
+               "Specify the target filename to include those options.\n");
+    }
+
     return 0;
 }
 
@@ -1205,7 +1217,7 @@ static int compare_buffers(const uint8_t *buf1, const uint8_t *buf2,
     return res;
 }
 
-#define IO_BUF_SIZE (2 * 1024 * 1024)
+#define IO_BUF_SIZE (2 * MiB)
 
 /*
  * Check if passed sectors are empty (not allocated or contain only 0 bytes)
@@ -1669,7 +1681,6 @@ static int coroutine_fn convert_co_read(ImgConvertState *s, int64_t sector_num,
                                         int nb_sectors, uint8_t *buf)
 {
     int n, ret;
-    QEMUIOVector qiov;
 
     assert(nb_sectors <= s->buf_sectors);
     while (nb_sectors > 0) {
@@ -1685,11 +1696,10 @@ static int coroutine_fn convert_co_read(ImgConvertState *s, int64_t sector_num,
         bs_sectors = s->src_sectors[src_cur];
 
         n = MIN(nb_sectors, bs_sectors - (sector_num - src_cur_offset));
-        qemu_iovec_init_buf(&qiov, buf, n << BDRV_SECTOR_BITS);
 
-        ret = blk_co_preadv(
+        ret = blk_co_pread(
                 blk, (sector_num - src_cur_offset) << BDRV_SECTOR_BITS,
-                n << BDRV_SECTOR_BITS, &qiov, 0);
+                n << BDRV_SECTOR_BITS, buf, 0);
         if (ret < 0) {
             return ret;
         }
@@ -1708,7 +1718,6 @@ static int coroutine_fn convert_co_write(ImgConvertState *s, int64_t sector_num,
                                          enum ImgConvertBlockStatus status)
 {
     int ret;
-    QEMUIOVector qiov;
 
     while (nb_sectors > 0) {
         int n = nb_sectors;
@@ -1736,10 +1745,8 @@ static int coroutine_fn convert_co_write(ImgConvertState *s, int64_t sector_num,
                 (s->compressed &&
                  !buffer_is_zero(buf, n * BDRV_SECTOR_SIZE)))
             {
-                qemu_iovec_init_buf(&qiov, buf, n << BDRV_SECTOR_BITS);
-
-                ret = blk_co_pwritev(s->target, sector_num << BDRV_SECTOR_BITS,
-                                     n << BDRV_SECTOR_BITS, &qiov, flags);
+                ret = blk_co_pwrite(s->target, sector_num << BDRV_SECTOR_BITS,
+                                    n << BDRV_SECTOR_BITS, buf, flags);
                 if (ret < 0) {
                     return ret;
                 }
@@ -2954,7 +2961,7 @@ static int img_map(int argc, char **argv)
         int64_t n;
 
         /* Probe up to 1 GiB at a time.  */
-        n = MIN(1 << 30, length - offset);
+        n = MIN(1 * GiB, length - offset);
         ret = get_block_status(bs, offset, n, &next);
 
         if (ret < 0) {
@@ -3305,26 +3312,30 @@ static int img_rebase(int argc, char **argv)
         char backing_name[PATH_MAX];
         QDict *options = NULL;
 
-        if (bs->backing_format[0] != '\0') {
-            options = qdict_new();
-            qdict_put_str(options, "driver", bs->backing_format);
-        }
-
-        if (force_share) {
-            if (!options) {
+        if (bs->backing) {
+            if (bs->backing_format[0] != '\0') {
                 options = qdict_new();
+                qdict_put_str(options, "driver", bs->backing_format);
             }
-            qdict_put_bool(options, BDRV_OPT_FORCE_SHARE, true);
-        }
-        bdrv_get_backing_filename(bs, backing_name, sizeof(backing_name));
-        blk_old_backing = blk_new_open(backing_name, NULL,
-                                       options, src_flags, &local_err);
-        if (!blk_old_backing) {
-            error_reportf_err(local_err,
-                              "Could not open old backing file '%s': ",
-                              backing_name);
-            ret = -1;
-            goto out;
+
+            if (force_share) {
+                if (!options) {
+                    options = qdict_new();
+                }
+                qdict_put_bool(options, BDRV_OPT_FORCE_SHARE, true);
+            }
+            bdrv_get_backing_filename(bs, backing_name, sizeof(backing_name));
+            blk_old_backing = blk_new_open(backing_name, NULL,
+                                           options, src_flags, &local_err);
+            if (!blk_old_backing) {
+                error_reportf_err(local_err,
+                                  "Could not open old backing file '%s': ",
+                                  backing_name);
+                ret = -1;
+                goto out;
+            }
+        } else {
+            blk_old_backing = NULL;
         }
 
         if (out_baseimg[0]) {
@@ -3377,7 +3388,7 @@ static int img_rebase(int argc, char **argv)
      */
     if (!unsafe) {
         int64_t size;
-        int64_t old_backing_size;
+        int64_t old_backing_size = 0;
         int64_t new_backing_size = 0;
         uint64_t offset;
         int64_t n;
@@ -3393,15 +3404,18 @@ static int img_rebase(int argc, char **argv)
             ret = -1;
             goto out;
         }
-        old_backing_size = blk_getlength(blk_old_backing);
-        if (old_backing_size < 0) {
-            char backing_name[PATH_MAX];
+        if (blk_old_backing) {
+            old_backing_size = blk_getlength(blk_old_backing);
+            if (old_backing_size < 0) {
+                char backing_name[PATH_MAX];
 
-            bdrv_get_backing_filename(bs, backing_name, sizeof(backing_name));
-            error_report("Could not get size of '%s': %s",
-                         backing_name, strerror(-old_backing_size));
-            ret = -1;
-            goto out;
+                bdrv_get_backing_filename(bs, backing_name,
+                                          sizeof(backing_name));
+                error_report("Could not get size of '%s': %s",
+                             backing_name, strerror(-old_backing_size));
+                ret = -1;
+                goto out;
+            }
         }
         if (blk_new_backing) {
             new_backing_size = blk_getlength(blk_new_backing);
@@ -3418,6 +3432,8 @@ static int img_rebase(int argc, char **argv)
         }
 
         for (offset = 0; offset < size; offset += n) {
+            bool buf_old_is_zero = false;
+
             /* How many bytes can we handle with the next read? */
             n = MIN(IO_BUF_SIZE, size - offset);
 
@@ -3438,6 +3454,7 @@ static int img_rebase(int argc, char **argv)
              */
             if (offset >= old_backing_size) {
                 memset(buf_old, 0, n);
+                buf_old_is_zero = true;
             } else {
                 if (offset + n > old_backing_size) {
                     n = old_backing_size - offset;
@@ -3473,8 +3490,12 @@ static int img_rebase(int argc, char **argv)
                 if (compare_buffers(buf_old + written, buf_new + written,
                                     n - written, &pnum))
                 {
-                    ret = blk_pwrite(blk, offset + written,
-                                     buf_old + written, pnum, 0);
+                    if (buf_old_is_zero) {
+                        ret = blk_pwrite_zeroes(blk, offset + written, pnum, 0);
+                    } else {
+                        ret = blk_pwrite(blk, offset + written,
+                                         buf_old + written, pnum, 0);
+                    }
                     if (ret < 0) {
                         error_report("Error while writing to COW image: %s",
                             strerror(-ret));

@@ -537,7 +537,7 @@ static void decode_RV32_64C(DisasContext *ctx)
 }
 
 #define EX_SH(amount) \
-    static int ex_shift_##amount(int imm) \
+    static int ex_shift_##amount(DisasContext *ctx, int imm) \
     {                                         \
         return imm << amount;                 \
     }
@@ -553,7 +553,7 @@ EX_SH(12)
     }                              \
 } while (0)
 
-static int ex_rvc_register(int reg)
+static int ex_rvc_register(DisasContext *ctx, int reg)
 {
     return 8 + reg;
 }
@@ -838,11 +838,11 @@ static const TranslatorOps riscv_tr_ops = {
     .disas_log          = riscv_tr_disas_log,
 };
 
-void gen_intermediate_code(CPUState *cs, TranslationBlock *tb)
+void gen_intermediate_code(CPUState *cs, TranslationBlock *tb, int max_insns)
 {
     DisasContext ctx;
 
-    translator_loop(&riscv_tr_ops, &ctx.base, cs, tb);
+    translator_loop(&riscv_tr_ops, &ctx.base, cs, tb, max_insns);
 }
 
 void riscv_translate_init(void)

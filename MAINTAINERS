@@ -663,10 +663,14 @@ M: Peter Maydell <peter.maydell@linaro.org>
 L: qemu-arm@nongnu.org
 S: Odd Fixes
 F: hw/arm/nseries.c
+F: hw/display/blizzard.c
 F: hw/input/lm832x.c
 F: hw/input/tsc2005.c
 F: hw/misc/cbus.c
 F: hw/timer/twl92230.c
+F: include/hw/display/blizzard.h
+F: include/hw/input/tsc2xxx.h
+F: include/hw/misc/cbus.h
 
 Palm
 M: Andrzej Zaborowski <balrogg@gmail.com>
@@ -675,6 +679,7 @@ L: qemu-arm@nongnu.org
 S: Odd Fixes
 F: hw/arm/palm.c
 F: hw/input/tsc210x.c
+F: include/hw/input/tsc2xxx.h
 
 Raspberry Pi
 M: Peter Maydell <peter.maydell@linaro.org>
@@ -714,6 +719,7 @@ F: hw/misc/mst_fpga.c
 F: hw/misc/max111x.c
 F: include/hw/arm/pxa.h
 F: include/hw/arm/sharpsl.h
+F: include/hw/display/tc6393xb.h
 
 SABRELITE / i.MX6
 M: Peter Maydell <peter.maydell@linaro.org>
@@ -740,6 +746,7 @@ M: Peter Maydell <peter.maydell@linaro.org>
 L: qemu-arm@nongnu.org
 S: Maintained
 F: hw/*/stellaris*
+F: include/hw/input/gamepad.h
 
 Versatile Express
 M: Peter Maydell <peter.maydell@linaro.org>
@@ -1181,6 +1188,7 @@ S: Supported
 F: hw/s390x/ipl.*
 F: pc-bios/s390-ccw/
 F: pc-bios/s390-ccw.img
+F: docs/devel/s390-dasd-ipl.txt
 T: git https://github.com/borntraeger/qemu.git s390-next
 L: qemu-s390x@nongnu.org
 
@@ -1383,6 +1391,13 @@ F: include/hw/net/
 F: tests/virtio-net-test.c
 T: git https://github.com/jasowang/qemu.git net
 
+Parallel NOR Flash devices
+M: Philippe Mathieu-Daudé <philmd@redhat.com>
+T: git https://gitlab.com/philmd/qemu.git pflash-next
+S: Maintained
+F: hw/block/pflash_cfi*.c
+F: include/hw/block/flash.h
+
 SCSI
 M: Paolo Bonzini <pbonzini@redhat.com>
 R: Fam Zheng <fam@euphon.net>
@@ -1445,6 +1460,7 @@ S: Supported
 F: hw/vfio/ccw.c
 F: hw/s390x/s390-ccw.c
 F: include/hw/s390x/s390-ccw.h
+F: include/hw/s390x/vfio-ccw.h
 T: git https://github.com/cohuck/qemu.git s390-next
 L: qemu-s390x@nongnu.org
 
@@ -1469,6 +1485,8 @@ F: hw/*/*vhost*
 F: docs/interop/vhost-user.json
 F: docs/interop/vhost-user.txt
 F: contrib/vhost-user-*/
+F: backends/vhost-user.c
+F: include/sysemu/vhost-user-backend.h
 
 virtio
 M: Michael S. Tsirkin <mst@redhat.com>
@@ -1510,6 +1528,7 @@ L: qemu-s390x@nongnu.org
 virtio-input
 M: Gerd Hoffmann <kraxel@redhat.com>
 S: Maintained
+F: hw/input/vhost-user-input.c
 F: hw/input/virtio-input*.c
 F: include/hw/virtio/virtio-input.h
 
@@ -2026,6 +2045,7 @@ M: Laurent Vivier <lvivier@redhat.com>
 R: Paolo Bonzini <pbonzini@redhat.com>
 S: Maintained
 F: qtest.c
+F: accel/qtest.c
 F: tests/libqtest.*
 F: tests/libqos/
 F: tests/*-test.c
@@ -2394,12 +2414,13 @@ F: block/ssh.c
 
 CURL
 L: qemu-block@nongnu.org
-S: Supported
+S: Odd Fixes
 F: block/curl.c
 
 GLUSTER
 L: qemu-block@nongnu.org
-S: Supported
+L: integration@gluster.org
+S: Odd Fixes
 F: block/gluster.c
 
 Null Block Driver
