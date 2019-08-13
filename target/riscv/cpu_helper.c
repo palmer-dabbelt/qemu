@@ -256,12 +256,18 @@ restart:
             1 << MMU_DATA_LOAD, PRV_S)) {
             return TRANSLATE_PMP_FAIL;
         }
+
+        MemTxResult res;
+        MemTxAttrs attrs = MEMTXATTRS_UNSPECIFIED;
 #if defined(TARGET_RISCV32)
-        target_ulong pte = ldl_phys(cs->as, pte_addr);
+        target_ulong pte = address_space_ldl(cs->as, pte_addr, attrs, &res);
 #elif defined(TARGET_RISCV64)
-        target_ulong pte = ldq_phys(cs->as, pte_addr);
+        target_ulong pte = address_space_ldq(cs->as, pte_addr, attrs, &res);
 #endif
         target_ulong ppn = pte >> PTE_PPN_SHIFT;
+        if (res != MEMTX_OK) {
+           return TRANSLATE_FAIL;
+        }
 
         if (!(pte & PTE_V)) {
             /* Invalid PTE */
